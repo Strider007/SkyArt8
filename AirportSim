@@ -1,0 +1,59 @@
+import java.util.concurrent.*;
+
+public class AirportSimulation {
+    public static void main(String[] args) {
+        FlightSchedule flightSchedule = new FlightSchedule();
+        flightSchedule.addFlight(new Flight("F1", "A", "B", 60, 120));
+        flightSchedule.addFlight(new Flight("F2", "A", "C", 100, 200));
+        flightSchedule.addFlight(new Flight("F3", "B", "C", 130, 180));
+        flightSchedule.addFlight(new Flight("F4", "C", "D", 220, 300));
+        flightSchedule.addFlight(new Flight("F5", "B", "D", 190, 250));
+
+        Map<String, Integer> earliestArrivalTimes = FlightPlanner.calculateEarliestArrivalTimes(flightSchedule, "A", 0);
+        ATC atc = new ATC(flightSchedule, earliestArrivalTimes);
+        
+        ScheduledExecutorService landingScheduler = Executors.newScheduledThreadPool(1);
+        ScheduledExecutorService departingScheduler = Executors.newScheduledThreadPool(1);
+
+        landingScheduler.scheduleAtFixedRate(() -> {
+            // Generate landing aircraft based on flight schedule
+            int scheduledTime = new Random().nextInt(24 * 60); // Random time in minutes
+            Aircraft aircraft = new Aircraft(Aircraft.Type.LANDING, new Random().nextInt(10) + 1, scheduledTime, "LandingFlight-" + scheduledTime);
+            new Thread(aircraft).start();
+        }, 0, 5, TimeUnit.SECONDS); // Generate landing aircraft every 5 seconds
+
+        departingScheduler.scheduleAtFixedRate(() -> {
+            // Generate departing aircraft based on flight schedule
+            int scheduledTime = new Random().nextInt(24 * 60); // Random time in minutes
+            Aircraft aircraft = new Aircraft(Aircraft.Type.DEPARTING, new Random().nextInt(10) + 1, scheduledTime, "DepartingFlight-" + scheduledTime);
+            new Thread(aircraft).start();
+        }, 0, 7, TimeUnit.SECONDS); // Generate departing aircraft every 7 seconds
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            landingScheduler.shutdown();
+            departingScheduler.shutdown();
+            try {
+                if (!landingScheduler.awaitTermination(800, TimeUnit.MILLISECONDS)) {
+                    landingScheduler.shutdownNow();
+                }
+                if (!departingScheduler.awaitTermination(800, TimeUnit.MILLISECONDS)) {
+                    departingScheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                landingScheduler.shutdownNow();
+                departingScheduler.shutdownNow();
+            }
+        }));
+
+        // Finding earliest arrival time using Dijkstra's algorithm
+        String origin = "A";
+        String destination = "D";
+        int startTime = 0; // 00:00 in minutes
+        int arrivalTime = FlightPlanner.earliestArrivalTime(flightSchedule, origin, destination, startTime);
+        if (arrivalTime != -1) {
+            System.out.println("Earliest arrival time: " + arrivalTime + " minutes since start of the day");
+        } else {
+            System.out.println("Destination not reachable from the origin within the given constraints.");
+        }
+    }
+}
