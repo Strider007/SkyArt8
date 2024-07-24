@@ -1,0 +1,87 @@
+import java.util.*;
+
+class Flight {
+    String flightNumber;
+    String origin;
+    String destination;
+    int departureTime; // in minutes since start of the day
+    int arrivalTime; // in minutes since start of the day
+
+    Flight(String flightNumber, String origin, String destination, int departureTime, int arrivalTime) {
+        this.flightNumber = flightNumber;
+        this.origin = origin;
+        this.destination = destination;
+        this.departureTime = departureTime;
+        this.arrivalTime = arrivalTime;
+    }
+}
+
+class FlightSchedule {
+    Map<String, List<Flight>> flightsFromAirport = new HashMap<>();
+
+    void addFlight(Flight flight) {
+        flightsFromAirport.computeIfAbsent(flight.origin, k -> new ArrayList<>()).add(flight);
+    }
+
+    List<Flight> getFlightsFrom(String airport) {
+        return flightsFromAirport.getOrDefault(airport, new ArrayList<>());
+    }
+}
+
+class FlightPlanner {
+    public static int earliestArrivalTime(FlightSchedule schedule, String origin, String destination, int startTime) {
+        Map<String, Integer> earliestArrival = new HashMap<>();
+        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingInt(a -> a[1]));
+
+        pq.add(new int[]{origin.hashCode(), startTime});
+        earliestArrival.put(origin, startTime);
+
+        while (!pq.isEmpty()) {
+            int[] current = pq.poll();
+            String currentAirport = String.valueOf(current[0]);
+            int currentTime = current[1];
+
+            if (currentAirport.equals(destination)) {
+                return currentTime;
+            }
+
+            for (Flight flight : schedule.getFlightsFrom(currentAirport)) {
+                if (flight.departureTime >= currentTime) {
+                    int newTime = flight.arrivalTime;
+                    if (newTime < earliestArrival.getOrDefault(flight.destination, Integer.MAX_VALUE)) {
+                        earliestArrival.put(flight.destination, newTime);
+                        pq.add(new int[]{flight.destination.hashCode(), newTime});
+                    }
+                }
+            }
+        }
+
+        return -1; // Destination not reachable
+    }
+
+    public static Map<String, Integer> calculateEarliestArrivalTimes(FlightSchedule schedule, String origin, int startTime) {
+        Map<String, Integer> earliestArrival = new HashMap<>();
+        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingInt(a -> a[1]));
+
+        pq.add(new int[]{origin.hashCode(), startTime});
+        earliestArrival.put(origin, startTime);
+
+        while (!pq.isEmpty()) {
+            int[] current = pq.poll();
+            String currentAirport = String.valueOf(current[0]);
+            int currentTime = current[1];
+
+            for (Flight flight : schedule.getFlightsFrom(currentAirport)) {
+                if (flight.departureTime >= currentTime) {
+                    int newTime = flight.arrivalTime;
+                    if (newTime < earliestArrival.getOrDefault(flight.destination, Integer.MAX_VALUE)) {
+                        earliestArrival.put(flight.destination, newTime);
+                        pq.add(new int[]{flight.destination.hashCode(), newTime});
+                    }
+                }
+            }
+        }
+
+        return earliestArrival;
+    }
+}
