@@ -1,0 +1,128 @@
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+
+class Aircraft implements Comparable<Aircraft>, Runnable {
+    enum Type { LANDING, DEPARTING }
+
+    String flightNumber;
+    Type type;
+    int priority; // Higher value means higher priority
+    int scheduledTime; // Time in minutes when the operation is scheduled
+    static AtomicInteger idGenerator = new AtomicInteger(0);
+    int id;
+
+    Aircraft(Type type, int priority, int scheduledTime, String flightNumber) {
+        this.flightNumber = flightNumber;
+        this.type = type;
+        this.priority = priority;
+        this.scheduledTime = scheduledTime;
+        this.id = idGenerator.incrementAndGet();
+    }
+
+    @Override
+    public int compareTo(Aircraft other) {
+        if (this.scheduledTime != other.scheduledTime) {
+            return Integer.compare(this.scheduledTime, other.scheduledTime);
+        }
+        return Integer.compare(other.priority, this.priority);
+    }
+
+    @Override
+    public void run() {
+        ATC.requestRunway(this);
+    }
+}
+
+class ATC {
+    private static final int NUM_RUNWAYS = 3;
+    private static final int NUM_TERMINALS = 5;
+
+    private PriorityQueue<Aircraft> landingQueue = new PriorityQueue<>();
+    private PriorityQueue<Aircraft> departingQueue = new PriorityQueue<>();
+
+    private Semaphore runways = new Semaphore(NUM_RUNWAYS, true);
+    private Semaphore terminals = new Semaphore(NUM_TERMINALS, true);
+
+    private Set<Integer> landedAircrafts = new HashSet<>();
+    private Random random = new Random();
+    private FlightSchedule flightSchedule;
+    private Map<String, Integer> earliestArrivalTimes;
+
+    ATC(FlightSchedule flightSchedule, Map<String, Integer> earliestArrivalTimes) {
+        this.flightSchedule = flightSchedule;
+        this.earliestArrivalTimes = earliestArrivalTimes;
+    }
+
+    synchronized void requestRunway(Aircraft aircraft) {
+        if (aircraft.type == Aircraft.Type.LANDING) {
+            landingQueue.add(aircraft);
+        } else {
+            departingQueue.add(aircraft);
+        }
+        manageRunways();
+    }
+
+    private void manageRunways() {
+        try {
+            while (!landingQueue.isEmpty() || !departingQueue.isEmpty()) {
+                if (runways.availablePermits() > 0) {
+                    Aircraft aircraft;
+                    if (!landingQueue.isEmpty()) {
+                        aircraft = landingQueue.poll();
+                    } else {
+                        aircraft = departingQueue.poll();
+                    }
+                    if (aircraft != null) {
+                        runways.acquire();
+                        if (aircraft.type == Aircraft.Type.LANDING) {
+                            landAircraft(aircraft);
+                        } else {
+                            departAircraft(aircraft);
+                        }
+                    }
+                } else {
+                    wait();
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private void landAircraft(Aircraft aircraft) {
+        new Thread(() -> {
+            try {
+                System.out.println(aircraft.flightNumber + " is landing...");
+                Thread.sleep(10000); // 10 seconds to land
+                runways.release();
+                System.out.println(aircraft.flightNumber + " has landed.");
+                terminals.acquire();
+                landedAircrafts.add(aircraft.id);
+                System.out.println(aircraft.flightNumber + " is at terminal.");
+                Thread.sleep(5000); // 5 seconds at terminal
+                terminals.release();
+                System.out.println(aircraft.flightNumber + " has left the terminal.");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                manageRunways();
+            }
+        }).start();
+    }
+
+    private void departAircraft(Aircraft aircraft) {
+        new Thread(() -> {
+            try {
+                System.out.println(aircraft.flightNumber + " is preparing for takeoff...");
+                Thread.sleep(5000); // Minimum 5 seconds to take off
+                runways.release();
+                System.out.println(aircraft.flightNumber + " has taken off.");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                manageRunways();
+            }
+        }).start();
+    }
+}
